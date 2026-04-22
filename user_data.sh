@@ -11,7 +11,7 @@ BACKEND_PORT=5001
 
 echo "=== [1/9] Update OS and install packages ==="
 dnf update -y
-dnf install -y git mariadb105 nginx
+dnf install -y git mariadb105 nginx openssl
 
 # Cài Node.js 20 từ NodeSource (Vite 8 yêu cầu Node >= 20)
 curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
@@ -26,8 +26,18 @@ git clone --depth 1 "${github_repo_url}" "$${APP_DIR}" || exit 1
 chown -R "$${APP_USER}:$${APP_USER}" "$${APP_DIR}"
 
 echo "=== [4/9] Create backend/.env ==="
+# Quan trong:
+# - CORS_ORIGIN phai la origin ma trinh duyet nguoi dung thuc su dung.
+# - Neu di qua CloudFront/custom domain, hay truyen domain CloudFront/custom domain tai day.
+# - ALB -> EC2 la server-to-server, khong phai browser origin.
+CORS_ORIGIN_VALUE="${cors_origin}"
+if [ -z "$${CORS_ORIGIN_VALUE}" ]; then
+  CORS_ORIGIN_VALUE="http://localhost:5173,http://127.0.0.1:5173"
+fi
+
 cat > "$${APP_DIR}/backend/.env" <<EOF_ENV
 PORT=$${BACKEND_PORT}
+NODE_ENV=production
 DB_MODE=mysql
 DB_HOST=${db_host}
 DB_PORT=${db_port}
@@ -37,7 +47,7 @@ DB_PASSWORD=${db_password}
 JWT_SECRET=$(openssl rand -hex 32)
 JWT_REFRESH_SECRET=$(openssl rand -hex 32)
 BCRYPT_SALT_ROUNDS=10
-CORS_ORIGIN=*
+CORS_ORIGIN=$${CORS_ORIGIN_VALUE}
 EOF_ENV
 
 chown "$${APP_USER}:$${APP_USER}" "$${APP_DIR}/backend/.env"
@@ -46,16 +56,15 @@ chmod 600 "$${APP_DIR}/backend/.env"
 echo "=== [5/9] Install backend dependencies ==="
 runuser -u "$${APP_USER}" -- bash -lc "
   cd '$${APP_DIR}/backend'
-  npm install --production
-  npm install bcryptjs --production --no-save
+  npm ci --omit=dev
 " || exit 1
 
 echo "=== [5b/9] Install frontend dependencies and build ==="
 # VITE_API_URL để trống = gọi relative URL (/api/...) → nginx proxy về backend
 runuser -u "$${APP_USER}" -- bash -lc "
   cd '$${APP_DIR}/frontend'
-  npm install
-  printf 'VITE_API_URL=\nVITE_SOCKET_URL=\n' > .env.production
+  npm ci
+  printf 'VITE_API_URL=/api\nVITE_SOCKET_URL=\n' > .env.production
   npm run build
 " || exit 1
 
@@ -85,8 +94,10 @@ server {
         proxy_pass http://127.0.0.1:$${BACKEND_PORT};
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
+        proxy_set_header X-Forwarded-Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_read_timeout 60s;
         proxy_connect_timeout 10s;
     }
@@ -98,7 +109,9 @@ server {
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
         proxy_set_header Host \$host;
+        proxy_set_header X-Forwarded-Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_read_timeout 3600s;
     }
 
