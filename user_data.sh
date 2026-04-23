@@ -56,14 +56,22 @@ chmod 600 "$${APP_DIR}/backend/.env"
 echo "=== [5/9] Install backend dependencies ==="
 runuser -u "$${APP_USER}" -- bash -lc "
   cd '$${APP_DIR}/backend'
-  npm ci --omit=dev
+  if [ -f package-lock.json ]; then
+    npm ci --omit=dev || npm install --omit=dev
+  else
+    npm install --omit=dev
+  fi
 " || exit 1
 
 echo "=== [5b/9] Install frontend dependencies and build ==="
 # VITE_API_URL để trống = gọi relative URL (/api/...) → nginx proxy về backend
 runuser -u "$${APP_USER}" -- bash -lc "
   cd '$${APP_DIR}/frontend'
-  npm ci
+  if [ -f package-lock.json ]; then
+    npm ci || npm install
+  else
+    npm install
+  fi
   printf 'VITE_API_URL=/api\nVITE_SOCKET_URL=\n' > .env.production
   npm run build
 " || exit 1
