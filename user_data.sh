@@ -46,8 +46,6 @@ AWS_REGION_VALUE=""
 AWS_SNS_SENDER_ID_VALUE=""
 EMAIL_PROVIDER_VALUE="${email_provider}"
 AWS_SES_REGION_VALUE="${ses_region}"
-AWS_SES_ACCESS_KEY_ID_VALUE="${ses_access_key_id}"
-AWS_SES_SECRET_ACCESS_KEY_VALUE="${ses_secret_access_key}"
 EMAIL_FROM_VALUE="${email_from}"
 
 cat > "$${APP_DIR}/backend/.env" <<EOF_ENV
@@ -71,26 +69,31 @@ AWS_REGION=$${AWS_REGION_VALUE}
 AWS_SNS_SENDER_ID=$${AWS_SNS_SENDER_ID_VALUE}
 EMAIL_PROVIDER=$${EMAIL_PROVIDER_VALUE}
 AWS_SES_REGION=$${AWS_SES_REGION_VALUE}
-AWS_SES_ACCESS_KEY_ID=$${AWS_SES_ACCESS_KEY_ID_VALUE}
-AWS_SES_SECRET_ACCESS_KEY=$${AWS_SES_SECRET_ACCESS_KEY_VALUE}
 EMAIL_FROM=$${EMAIL_FROM_VALUE}
 EOF_ENV
 
 chown "$${APP_USER}:$${APP_USER}" "$${APP_DIR}/backend/.env"
 chmod 600 "$${APP_DIR}/backend/.env"
 
-echo "=== [5/9] Install workspace dependencies ==="
+echo "=== [5/9] Install backend dependencies ==="
 runuser -u "$${APP_USER}" -- bash -lc "
-  cd '$${APP_DIR}'
-  # Cài đặt từ thư mục gốc cho NPM Workspace (cả backend & frontend)
-  # --include=optional đảm bảo cài đặt native bindings của rolldown/esbuild trên Linux
-  npm install --include=optional
+  cd '$${APP_DIR}/backend'
+  if [ -f package-lock.json ]; then
+    npm ci --omit=dev || npm install --omit=dev
+  else
+    npm install --omit=dev
+  fi
 " || exit 1
 
 echo "=== [5b/9] Build frontend ==="
 # VITE_API_URL để trống = gọi relative URL (/api/...) → nginx proxy về backend
 runuser -u "$${APP_USER}" -- bash -lc "
   cd '$${APP_DIR}/frontend'
+  if [ -f package-lock.json ]; then
+    npm ci || npm install
+  else
+    npm install
+  fi
   printf 'VITE_API_URL=/api\nVITE_SOCKET_URL=\n' > .env.production
   npm run build
 " || exit 1
