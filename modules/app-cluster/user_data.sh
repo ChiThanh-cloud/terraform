@@ -21,7 +21,6 @@ mkdir -p "$APP_DIR"
 git clone --depth 1 "${github_repo_url}" "$APP_DIR"
 
 echo "=== [3/6] Setup Environment Variables ==="
-# Bơm các tham số từ Terraform vào file .env cho backend
 cat > "$APP_DIR/backend/.env" <<EOF_ENV
 NODE_ENV=production
 PORT=5000
@@ -59,7 +58,6 @@ for i in $(seq 1 60); do
 done
 
 echo "=== [5/6] Setup frontend environment ==="
-# Nếu dự án cần .env.production cho frontend lúc build thì tự tạo
 cat > "$APP_DIR/frontend/.env.production" <<EOF_ENV_FE
 VITE_API_URL=/api
 VITE_SOCKET_URL=
@@ -67,7 +65,6 @@ EOF_ENV_FE
 
 echo "=== [6/6] Build and Run Docker ==="
 cd "$APP_DIR"
-# Sử dụng file docker-compose.yml đã có sẵn trên thư mục deploy/docker/ của repo GitHub
 docker-compose -f deploy/docker/docker-compose.yml up --build -d
 
 echo "=== Done ==="

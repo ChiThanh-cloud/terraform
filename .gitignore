@@ -1,5 +1,33 @@
-# macOS
+# ─── macOS ────────────────────────────────────────────────
 .DS_Store
 ._*
 .AppleDouble
 .LSOverride
+
+# ─── Terraform core ───────────────────────────────────────
+**/.terraform/
+**/.terraform.lock.hcl
+
+# ─── State files (never commit state to Git) ──────────────
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# ─── Secrets & overrides (never commit) ───────────────────
+*.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# ─── Crash logs ───────────────────────────────────────────
+crash.log
+crash.*.log
+
+# ─── Plan output (binary, not human-readable) ─────────────
+*.tfplan
+
+# ─── Other ───────────────────────────────────────────────
+INFRASTRUCTURE.md
+TECHNICAL_EXPLAINER.md
+ComparisonTool.html
