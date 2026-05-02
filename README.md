@@ -103,7 +103,7 @@ terraform/
 | Email | **AWS SES** | Transactional email via IAM Role |
 | Security | **WAF v2** | Rate limiting, IP reputation, OWASP |
 
----
+--- 
 
 ## 🔒 Security Highlights
 
