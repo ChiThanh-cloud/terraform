@@ -60,7 +60,7 @@ jobs:
       - name: "⚙️ Setup Terraform"
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: "~> 1.5"
+          terraform_version: "~> 1.10"
 
       # ─── BƯỚC 4: Khởi tạo — Kết nối tới S3 Backend ───────────
       - name: "🔧 Terraform Init"
