@@ -13,10 +13,10 @@ environment  = "prod"
 app_port = 80
 
 # Database
-db_name              = "hospital_booking"
-db_instance_class    = "db.t3.micro"
-db_allocated_storage = 20
-multi_az             = false
+db_name                 = "hospital_booking"
+db_instance_class       = "db.t3.micro"
+db_allocated_storage    = 20
+multi_az                = false
 backup_retention_period = 7
 
 # Compute
@@ -34,3 +34,9 @@ acm_certificate_arn = "arn:aws:acm:us-east-1:216938125549:certificate/2f1c625d-a
 custom_domain       = "nguyenchithanhit.id.vn"
 enable_waf          = false
 waf_rate_limit      = 1000
+
+# CI/CD — GitHub OIDC
+# Phải khớp chính xác với tên Repo trên GitHub (owner/repo-name)
+github_terraform_repo = "Thanh123-ui/terraform"
+tf_state_bucket       = "hospital-booking-tfstate"
+tf_lock_table         = "hospital-booking-tflock"

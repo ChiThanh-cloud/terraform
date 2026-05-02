@@ -8,7 +8,9 @@ resource "aws_wafv2_web_acl" "this" {
   description = "WAF protecting ALB for ${var.name_prefix}"
   scope       = "REGIONAL"
 
-  default_action { allow {} }
+  default_action {
+    allow {}
+  }
 
   visibility_config {
     cloudwatch_metrics_enabled = true
@@ -19,7 +21,9 @@ resource "aws_wafv2_web_acl" "this" {
   rule {
     name     = "AWS-Amazon-IP-Reputation"
     priority = 10
-    override_action { none {} }
+    override_action {
+      none {}
+    }
     statement {
       managed_rule_group_statement {
         name        = "AWSManagedRulesAmazonIpReputationList"
@@ -36,7 +40,9 @@ resource "aws_wafv2_web_acl" "this" {
   rule {
     name     = "AWS-Common-Rule-Set"
     priority = 20
-    override_action { none {} }
+    override_action {
+      none {}
+    }
     statement {
       managed_rule_group_statement {
         name        = "AWSManagedRulesCommonRuleSet"
@@ -53,7 +59,9 @@ resource "aws_wafv2_web_acl" "this" {
   rule {
     name     = "AWS-Known-Bad-Inputs"
     priority = 30
-    override_action { none {} }
+    override_action {
+      none {}
+    }
     statement {
       managed_rule_group_statement {
         name        = "AWSManagedRulesKnownBadInputsRuleSet"
@@ -70,7 +78,9 @@ resource "aws_wafv2_web_acl" "this" {
   rule {
     name     = "RateLimitPerIP"
     priority = 40
-    action { block {} }
+    action {
+      block {}
+    }
     statement {
       rate_based_statement {
         limit              = var.waf_rate_limit
@@ -125,7 +135,9 @@ resource "aws_cloudfront_distribution" "this" {
     forwarded_values {
       query_string = true
       headers      = ["Authorization", "Origin", "Host", "Content-Type", "Accept", "Access-Control-Request-Method", "Access-Control-Request-Headers"]
-      cookies { forward = "all" }
+      cookies {
+        forward = "all"
+      }
     }
 
     min_ttl     = 0
@@ -134,7 +146,9 @@ resource "aws_cloudfront_distribution" "this" {
   }
 
   restrictions {
-    geo_restriction { restriction_type = "none" }
+    geo_restriction {
+      restriction_type = "none"
+    }
   }
 
   viewer_certificate {

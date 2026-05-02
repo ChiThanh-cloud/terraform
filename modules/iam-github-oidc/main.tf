@@ -23,7 +23,7 @@ resource "aws_iam_openid_connect_provider" "github" {
 ############################################
 resource "aws_iam_role" "github_actions" {
   name        = "${var.name_prefix}-github-actions"
-  description = "Role cho phép GitHub Actions repo ${var.github_repo} chạy Terraform"
+  description = "Allow GitHub Actions repo ${var.github_repo} to run Terraform"
 
   # TRUST POLICY — Quy tắc "Ai được phép mặc Role này?"
   # Đây là trái tim của toàn bộ cơ chế OIDC

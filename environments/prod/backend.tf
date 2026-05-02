@@ -10,10 +10,10 @@
 ############################################
 terraform {
   backend "s3" {
-    bucket         = "hospital-booking-tfstate"
-    key            = "environments/prod/terraform.tfstate"
-    region         = "us-east-1"
-    encrypt        = true
-    dynamodb_table = "hospital-booking-tflock"
+    bucket       = "hospital-booking-tfstate"
+    key          = "environments/prod/terraform.tfstate"
+    region       = "us-east-1"
+    encrypt      = true
+    use_lockfile = true # Thay thế dynamodb_table (Deprecated từ AWS Provider v6)
   }
 }
