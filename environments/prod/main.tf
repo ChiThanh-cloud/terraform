@@ -27,7 +27,8 @@ data "aws_ssm_parameter" "email_from" {
 ############################################
 locals {
   name_prefix = "${var.project_name}-${var.environment}"
-  cors_origin = var.custom_domain != "" ? "https://${var.custom_domain}" : "https://${module.cdn_waf.cloudfront_domain}"
+  # Dùng "*" làm fallback thay vì module.cdn_waf.cloudfront_domain để tránh lỗi vòng lặp (Dependency Cycle)
+  cors_origin = var.custom_domain != "" ? "https://${var.custom_domain}" : "*"
 }
 
 ############################################
@@ -134,3 +135,6 @@ module "github_oidc" {
   tf_state_bucket = var.tf_state_bucket
   tf_lock_table   = var.tf_lock_table
 }
+
+
+#test cicd
