@@ -1,35 +1,27 @@
-# ─────────────────────────────────────────────────────────────────
-# .github/workflows/terraform.yml
-# Pipeline tự động kiểm tra và triển khai hạ tầng Terraform
-# Sử dụng OIDC — KHÔNG dùng Access Key tĩnh
-# ─────────────────────────────────────────────────────────────────
-
 name: "Terraform CI/CD"
 
 on:
-  # Chạy khi có Pull Request → Chỉ chạy Plan để review
   pull_request:
     branches: [main]
     paths:
       - "environments/prod/**"
       - "modules/**"
+      - ".github/workflows/**"
 
-  # Chạy khi Merge vào main → Chạy Apply để triển khai thật
   push:
     branches: [main]
     paths:
       - "environments/prod/**"
       - "modules/**"
+      - ".github/workflows/**"
 
-# Khai báo quyền để GitHub có thể lấy OIDC Token
-# Đây là phần "xin phép" trước khi sang nhà AWS
 permissions:
-  id-token: write   # Cho phép tạo OIDC Token
-  contents: read    # Cho phép đọc code trong Repo
-  pull-requests: write # Cho phép comment kết quả Plan vào PR
+  id-token: write
+  contents: read
+  pull-requests: write
 
 env:
-  TF_WORKING_DIR: environments/prod  # Thư mục chứa code Terraform
+  TF_WORKING_DIR: environments/prod
 
 jobs:
   terraform:
@@ -37,67 +29,50 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ─── BƯỚC 1: Kéo code về máy ảo của GitHub ───────────────
-      - name: "📥 Checkout code"
+      - name: "Checkout code"
         uses: actions/checkout@v4
 
-      # ─── BƯỚC 2: Xác thực với AWS qua OIDC ───────────────────
-      # Đây là bước thần kỳ — không có mật khẩu nào cả
-      # GitHub sẽ tự tạo Token và AWS sẽ xác nhận Token đó
-      - name: "🔐 Configure AWS credentials via OIDC"
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          # ARN của Role bạn tạo bằng Terraform
-          # Lấy từ output: module.github_oidc.github_actions_role_arn
-          # Sau đó lưu vào GitHub Secrets với tên: AWS_ROLE_ARN
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: us-east-1
-          # Token tạm thời này chỉ sống 1 tiếng
-          # Sau đó tự chết, không ai dùng lại được
-          role-session-name: GitHubActions-Terraform-${{ github.run_id }}
-
-      # ─── BƯỚC 3: Cài đặt Terraform ────────────────────────────
-      - name: "⚙️ Setup Terraform"
+      - name: "Setup Terraform"
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "~> 1.10"
 
-      # ─── BƯỚC 4: Khởi tạo — Kết nối tới S3 Backend ───────────
-      - name: "🔧 Terraform Init"
+      - name: "Configure AWS credentials via OIDC"
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: GitHubActions-Terraform-${{ github.run_id }}
+
+      - name: "Terraform Init"
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform init
 
-      # ─── BƯỚC 5: Kiểm tra định dạng code ─────────────────────
-      - name: "✨ Terraform Format Check"
+      - name: "Terraform Format Check"
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform fmt -check -recursive
-        continue-on-error: true  # Không block pipeline nếu format sai
+        continue-on-error: true
 
-      # ─── BƯỚC 6: Kiểm tra cú pháp ────────────────────────────
-      - name: "✅ Terraform Validate"
+      - name: "Terraform Validate"
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform validate
 
-      # ─── BƯỚC 7: Tạo Plan ─────────────────────────────────────
-      # Chạy trên cả Pull Request lẫn Push vào main
-      - name: "📋 Terraform Plan"
+      - name: "Terraform Plan"
         working-directory: ${{ env.TF_WORKING_DIR }}
         id: plan
         run: terraform plan -no-color -out=tfplan
         continue-on-error: true
 
-      # ─── BƯỚC 8: Comment kết quả Plan vào Pull Request ────────
-      # Giúp team review thay đổi hạ tầng TRƯỚC khi merge
-      - name: "💬 Comment Plan to PR"
+      - name: "Comment Plan to PR"
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           script: |
-            const output = `#### 🗺️ Terraform Plan Result
+            const output = `#### Terraform Plan Result
             \`\`\`
             ${{ steps.plan.outputs.stdout }}
             \`\`\`
-            *Pushed by: @${{ github.actor }}, Action: \`${{ github.event_name }}\`*`;
+            *Pushed by: @${{ github.actor }}*`;
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
@@ -105,9 +80,7 @@ jobs:
               body: output
             })
 
-      # ─── BƯỚC 9: Apply — CHỈ chạy khi Merge vào main ─────────
-      # Đây là bước "thật" — thay đổi hạ tầng trên AWS
-      - name: "🚀 Terraform Apply"
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: "Terraform Apply"
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.plan.outcome == 'success'
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform apply -auto-approve tfplan
