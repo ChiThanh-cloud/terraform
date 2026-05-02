@@ -109,7 +109,10 @@ resource "aws_iam_role_policy" "github_actions_terraform" {
           "ssm:GetParameters",
           "ssm:GetParametersByPath"
         ]
-        Resource = "arn:aws:ssm:${var.aws_region}:*:parameter/hospital/*"
+        Resource = [
+          "arn:aws:ssm:${var.aws_region}:*:parameter/hospital/*",
+          "arn:aws:ssm:${var.aws_region}::parameter/aws/service/ami-amazon-linux-latest/*"
+        ]
       },
       {
         Sid      = "TerraformInfraAccess"
