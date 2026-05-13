@@ -1,12 +1,12 @@
 #!/bin/bash
-set -ex
+set -euo pipefail
 exec > >(tee /var/log/user-data.log | logger -t user-data 2>/dev/console) 2>&1
 
 APP_DIR="/opt/webhospital-booking"
 
 echo "=== [1/5] Install OS packages & Docker ==="
 dnf update -y
-dnf install -y git mariadb105 docker
+dnf install -y git mariadb105 docker awscli-2
 systemctl enable docker
 systemctl start docker
 usermod -aG docker ec2-user
@@ -19,7 +19,18 @@ rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR"
 git clone --depth 1 "${github_repo_url}" "$APP_DIR"
 
-echo "=== [3/5] Inject secrets into backend/.env ==="
+echo "=== [3/5] Fetch runtime secrets from SSM and write backend/.env ==="
+DB_USERNAME=$(aws ssm get-parameter \
+  --name "${db_username}" \
+  --query "Parameter.Value" \
+  --output text)
+
+DB_PASSWORD=$(aws ssm get-parameter \
+  --name "${db_password}" \
+  --with-decryption \
+  --query "Parameter.Value" \
+  --output text)
+
 cat > "$APP_DIR/backend/.env" <<EOF_ENV
 NODE_ENV=production
 PORT=5000
@@ -27,8 +38,8 @@ DB_MODE=mysql
 DB_HOST=${db_host}
 DB_PORT=${db_port}
 DB_NAME=${db_name}
-DB_USER=${db_username}
-DB_PASSWORD=${db_password}
+DB_USER=$${DB_USERNAME}
+DB_PASSWORD=$${DB_PASSWORD}
 JWT_SECRET=$(openssl rand -hex 32)
 JWT_REFRESH_SECRET=$(openssl rand -hex 32)
 BCRYPT_SALT_ROUNDS=10
@@ -42,13 +53,14 @@ PATIENT_RESET_OTP_TTL_SECONDS=300
 PATIENT_RESET_OTP_RESEND_SECONDS=60
 PATIENT_RESET_OTP_PREVIEW=true
 EOF_ENV
+chmod 600 "$APP_DIR/backend/.env"
 
 echo "=== [4/5] Wait for RDS & seed schema ==="
 for i in $(seq 1 60); do
-  if MYSQL_PWD='${db_password}' mysql --protocol=tcp --connect-timeout=5 -h '${db_host}' -P '${db_port}' -u '${db_username}' -D '${db_name}' -e "SELECT 1;" >/dev/null 2>&1; then
+  if MYSQL_PWD="$${DB_PASSWORD}" mysql --protocol=tcp --connect-timeout=5 -h '${db_host}' -P '${db_port}' -u "$${DB_USERNAME}" -D '${db_name}' -e "SELECT 1;" >/dev/null 2>&1; then
     echo "RDS ready — seeding schema..."
-    MYSQL_PWD='${db_password}' mysql --default-character-set=utf8mb4 --protocol=tcp \
-      -h '${db_host}' -P '${db_port}' -u '${db_username}' -D '${db_name}' \
+    MYSQL_PWD="$${DB_PASSWORD}" mysql --default-character-set=utf8mb4 --protocol=tcp \
+      -h '${db_host}' -P '${db_port}' -u "$${DB_USERNAME}" -D '${db_name}' \
       < "$APP_DIR/database/schema.sql" || echo "Note: schema already exists or no schema.sql"
     break
   fi

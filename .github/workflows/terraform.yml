@@ -51,7 +51,6 @@ jobs:
       - name: "Terraform Format Check"
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform fmt -check -recursive
-        continue-on-error: true
 
       - name: "Terraform Validate"
         working-directory: ${{ env.TF_WORKING_DIR }}
@@ -61,7 +60,6 @@ jobs:
         working-directory: ${{ env.TF_WORKING_DIR }}
         id: plan
         run: terraform plan -no-color -out=tfplan
-        continue-on-error: true
 
       - name: "Comment Plan to PR"
         if: github.event_name == 'pull_request'

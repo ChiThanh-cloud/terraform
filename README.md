@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/License-MIT-green" />
 </p>
 
-> Production-grade AWS infrastructure for the [Hospital Booking System](https://github.com/Thanh123-ui/webhospital-booking), provisioned entirely with **Terraform** (Infrastructure as Code).  
+> Production-oriented AWS infrastructure for the [Hospital Booking System](https://github.com/ChiThanh-cloud/webhospital-booking), provisioned entirely with **Terraform** (Infrastructure as Code).  
 > Frontend & Backend run as **Docker containers** on EC2 — portable, reproducible, and zero manual server setup.
 
 ---
@@ -22,7 +22,7 @@
                                           │
                           ┌───────────────▼─────────────────┐
                           │         CloudFront CDN           │
-                          │  HTTPS · Custom Domain · WAF v2  │
+                          │ HTTPS · Domain · Optional WAF    │
                           │  ACM SSL      │
                           └───────────────┬─────────────────┘
                                           │
@@ -54,35 +54,28 @@
 ```
 terraform/
 │
-│── # ── CORE CONFIG ─────────────────────────────────────────
-├── providers.tf          # AWS provider, Terraform version, global default_tags
-├── variables.tf          # All input variable declarations
-├── terraform.tfvars      # Non-sensitive variable values (safe to commit)
-├── locals.tf             # Computed values, name prefix, user_data template
+├── environments/
+│   └── prod/
+│       ├── backend.tf          # S3 remote state backend
+│       ├── providers.tf        # Terraform and AWS provider configuration
+│       ├── variables.tf        # Production input variables
+│       ├── terraform.tfvars    # Non-sensitive production values
+│       ├── main.tf             # Composition layer wiring all modules
+│       └── outputs.tf          # Deployment outputs
 │
-│── # ── DATA SOURCES ─────────────────────────────────────────
-├── data.tf               # VPC, Subnets, AMI, SSM Parameter Store secrets
+├── modules/
+│   ├── network/                # Default VPC lookup and security groups
+│   ├── iam/                    # EC2 instance profile and runtime permissions
+│   ├── database/               # RDS MySQL and DB subnet group
+│   ├── app-cluster/            # ALB, Launch Template, Auto Scaling Group
+│   ├── cdn-waf/                # CloudFront distribution and optional WAF
+│   └── iam-github-oidc/        # GitHub Actions OIDC role for Terraform CI/CD
 │
-│── # ── SECURITY & IAM ───────────────────────────────────────
-├── iam.tf                # EC2 IAM Role, SES policy, Instance Profile
-├── security_groups.tf    # Firewall rules: ALB → EC2 → RDS
+├── .github/workflows/
+│   └── terraform.yml           # Terraform CI/CD pipeline
 │
-│── # ── COMPUTE & STORAGE ────────────────────────────────────
-├── database.tf           # RDS MySQL 8.0, DB Subnet Group
-├── compute.tf            # Launch Template, Auto Scaling Group
-│
-│── # ── NETWORKING & DELIVERY ────────────────────────────────
-├── alb.tf                # Application Load Balancer, Target Group, Listener
-├── cloudfront.tf         # CloudFront Distribution, ACM certificate binding
-├── waf.tf                # WAF v2: Rate limit, IP reputation, OWASP rules
-│
-│── # ── OBSERVABILITY ────────────────────────────────────────
-├── outputs.tf            # App URL, ALB DNS, CloudFront ID, RDS endpoint
-│
-│── # ── BOOTSTRAP ────────────────────────────────────────────
-├── user_data.sh          # EC2 startup: Docker install → clone repo → .env → docker-compose up
-│
-└── INFRASTRUCTURE.md     # Full technical documentation (Vietnamese)
+├── README.md                   # Project overview and usage
+└── INFRASTRUCTURE.md           # Research/defense architecture notes
 ```
 
 ---
@@ -101,7 +94,7 @@ terraform/
 | Secrets | **SSM Parameter Store** | Zero-hardcode secret management |
 | IAM | **EC2 IAM Role** | Keyless AWS access (Least Privilege) |
 | Email | **AWS SES** | Transactional email via IAM Role |
-| Security | **WAF v2** | Rate limiting, IP reputation, OWASP |
+| Security | **Optional AWS WAF v2** | Rate limiting, IP reputation, OWASP managed rules |
 
 --- 
 
@@ -113,7 +106,10 @@ EC2 uses an **IAM Instance Profile** — never an `AWS_ACCESS_KEY_ID` or `AWS_SE
 - `ses:SendEmail` — scoped to a single verified SES identity.
 
 ### ✅ Secrets Never in Code
-All sensitive values are stored in **AWS SSM Parameter Store** and fetched at deploy time via `data "aws_ssm_parameter"` blocks. The `terraform.tfvars` file committed to Git contains **zero secrets**.
+All sensitive values are stored in **AWS SSM Parameter Store**. Terraform uses the database password only where it is required to provision RDS, while EC2 receives SSM parameter names and fetches runtime secrets with its instance role during bootstrap. This keeps database credentials out of the Launch Template `user_data` and reduces secret exposure in bootstrap logs.
+
+### ✅ Scoped IAM for CI/CD
+GitHub Actions uses OIDC instead of long-lived AWS keys. The Terraform CI/CD role keeps broad infrastructure permissions for the services managed by this research project, but IAM permissions are explicitly listed instead of using `iam:*`. This makes the most sensitive permission group easier to audit and explain.
 
 ### ✅ Defense in Depth (Network Layers)
 ```
@@ -139,22 +135,22 @@ Create these **once** before running `terraform apply`:
 
 ```bash
 # Database credentials
-aws ssm put-parameter --name "/hospital/dev/db_username" \
+aws ssm put-parameter --name "/hospital/prod/db_username" \
   --value "admin" --type String --overwrite
 
-aws ssm put-parameter --name "/hospital/dev/db_password" \
+aws ssm put-parameter --name "/hospital/prod/db_password" \
   --value "YOUR_DB_PASSWORD" --type SecureString --overwrite
 
 # EC2 Key Pair
-aws ssm put-parameter --name "/hospital/dev/key_name" \
+aws ssm put-parameter --name "/hospital/prod/key_name" \
   --value "your-keypair-name" --type String --overwrite
 
 # Application
-aws ssm put-parameter --name "/hospital/dev/github_repo_url" \
-  --value "https://github.com/Thanh123-ui/webhospital-booking.git" \
+aws ssm put-parameter --name "/hospital/prod/github_repo_url" \
+  --value "https://github.com/ChiThanh-cloud/webhospital-booking.git" \
   --type String --overwrite
 
-aws ssm put-parameter --name "/hospital/dev/email_from" \
+aws ssm put-parameter --name "/hospital/prod/email_from" \
   --value "your-verified-ses-email@gmail.com" --type String --overwrite
 ```
 
@@ -164,14 +160,14 @@ aws ssm put-parameter --name "/hospital/dev/email_from" \
 |---|---|---|
 | `aws_region` | `us-east-1` | AWS deployment region |
 | `project_name` | `hospital-booking` | Resource name prefix |
-| `environment` | `dev` | Environment tag (dev/staging/prod) |
+| `environment` | `prod` | Environment tag (dev/staging/prod) |
 | `ec2_instance_type` | `t3.micro` | EC2 instance size |
 | `db_instance_class` | `db.t3.micro` | RDS instance size |
 | `app_port` | `80` | Port exposed by Nginx to ALB |
 | `email_provider` | `ses` | `ses` or `ethereal` (test mode) |
 | `ses_region` | `us-east-1` | AWS SES region |
-| `enable_waf` | `false` | Toggle WAF on/off |
-| `waf_rate_limit` | `100` | Requests per 5 min per IP |
+| `enable_waf` | `false` | Toggle optional WAF on/off |
+| `waf_rate_limit` | `1000` | Requests per 5 min per IP |
 
 ---
 
@@ -187,7 +183,7 @@ aws ssm put-parameter --name "/hospital/dev/email_from" \
 
 ```bash
 # 1. Clone this repository
-git clone https://github.com/Thanh123-ui/terraform.git
+git clone https://github.com/ChiThanh-cloud/terraform.git
 cd terraform
 
 # 2. Create SSM secrets (see Configuration section above)
@@ -238,15 +234,15 @@ terraform destroy
 
 | Repository | Description |
 |---|---|
-| [webhospital-booking](https://github.com/Thanh123-ui/webhospital-booking) | Main application (React Frontend + Node.js Backend) |
-| [terraform](https://github.com/Thanh123-ui/terraform) | This repository — AWS Infrastructure as Code |
+| [webhospital-booking](https://github.com/ChiThanh-cloud/webhospital-booking) | Main application (React Frontend + Node.js Backend) |
+| [terraform](https://github.com/ChiThanh-cloud/terraform) | This repository — AWS Infrastructure as Code |
 
 ---
 
 ## 👤 Author
 
 **Nguyễn Chí Thành**  
-[![GitHub](https://img.shields.io/badge/GitHub-Thanh123--ui-181717?logo=github)](https://github.com/Thanh123-ui)
+[![GitHub](https://img.shields.io/badge/GitHub-ChiThanh--cloud-181717?logo=github)](https://github.com/ChiThanh-cloud)
 
 ---
 

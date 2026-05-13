@@ -93,8 +93,8 @@ module "app_cluster" {
   db_host               = module.database.db_address
   db_port               = module.database.db_port
   db_name               = module.database.db_name
-  db_username           = data.aws_ssm_parameter.db_username.value
-  db_password           = data.aws_ssm_parameter.db_password.value
+  db_username           = data.aws_ssm_parameter.db_username.name
+  db_password           = data.aws_ssm_parameter.db_password.name
   cors_origin           = local.cors_origin
   email_provider        = var.email_provider
   aws_region            = var.aws_region
@@ -135,5 +135,4 @@ module "github_oidc" {
   tf_state_bucket = var.tf_state_bucket
   tf_lock_table   = var.tf_lock_table
 }
-
 

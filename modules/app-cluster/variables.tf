@@ -89,15 +89,13 @@ variable "db_name" {
 }
 
 variable "db_username" {
-  description = "Database username"
+  description = "Database username SSM parameter name"
   type        = string
-  sensitive   = true
 }
 
 variable "db_password" {
-  description = "Database password"
+  description = "Database password SSM parameter name"
   type        = string
-  sensitive   = true
 }
 
 variable "cors_origin" {

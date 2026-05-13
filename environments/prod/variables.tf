@@ -140,19 +140,19 @@ variable "waf_rate_limit" {
 # CI/CD — GitHub OIDC
 ############################################
 variable "github_terraform_repo" {
-  description = "GitHub repo của Terraform theo định dạng 'owner/repo'. Ví dụ: Thanh123-ui/terraform"
+  description = "GitHub repository authorized to run Terraform through OIDC, in 'owner/repository' format. Example: ChiThanh-cloud/terraform."
   type        = string
-  default     = "Thanh123-ui/terraform"
+  default     = "ChiThanh-cloud/terraform"
 }
 
 variable "tf_state_bucket" {
-  description = "Tên S3 Bucket chứa Terraform State — phải khớp với backend.tf"
+  description = "S3 bucket name used for Terraform remote state. Must match the backend configuration."
   type        = string
   default     = "hospital-booking-tfstate"
 }
 
 variable "tf_lock_table" {
-  description = "Tên DynamoDB Table dùng State Locking — phải khớp với backend.tf"
+  description = "DynamoDB table name used for Terraform state locking. Must match the backend configuration."
   type        = string
   default     = "hospital-booking-tflock"
 }

@@ -1,32 +1,30 @@
 ############################################
-# OIDC PROVIDER — Khai báo với AWS rằng
-# "Tôi tin tưởng GitHub làm Identity Provider"
-# Chỉ tạo 1 lần duy nhất cho toàn bộ tài khoản AWS.
+# OIDC Provider
+# Registers GitHub Actions as a trusted OpenID Connect identity provider.
+# This provider is account-wide and normally only needs to be created once.
 ############################################
+data "aws_caller_identity" "current" {}
+
 resource "aws_iam_openid_connect_provider" "github" {
-  # Địa chỉ của GitHub OIDC Server — không bao giờ thay đổi
+  # GitHub Actions OIDC issuer URL.
   url = "https://token.actions.githubusercontent.com"
 
-  # AWS cần biết Token này được tạo ra "cho ai dùng"
-  # "sts.amazonaws.com" là dịch vụ AWS dùng để đổi Token tạm thời
+  # Audience expected by AWS STS when exchanging the GitHub OIDC token.
   client_id_list = ["sts.amazonaws.com"]
 
-  # "Vân tay" (thumbprint) của chứng chỉ TLS của GitHub
-  # AWS dùng cái này để xác nhận Token đến thật sự từ GitHub,
-  # không phải từ kẻ giả mạo
+  # TLS certificate thumbprint used by AWS to verify the GitHub OIDC issuer.
   thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
 }
 
 ############################################
-# IAM ROLE — Vai trò mà GitHub Actions
-# sẽ "mặc vào" trong lúc chạy pipeline
+# IAM Role
+# Role assumed by GitHub Actions during Terraform CI/CD runs.
 ############################################
 resource "aws_iam_role" "github_actions" {
   name        = "${var.name_prefix}-github-actions"
   description = "Allow GitHub Actions repo ${var.github_repo} to run Terraform"
 
-  # TRUST POLICY — Quy tắc "Ai được phép mặc Role này?"
-  # Đây là trái tim của toàn bộ cơ chế OIDC
+  # Trust policy defining which GitHub Actions workload can assume this role.
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -34,26 +32,20 @@ resource "aws_iam_role" "github_actions" {
         Sid    = "AllowGitHubOIDC"
         Effect = "Allow"
 
-        # Chỉ cho phép Token đến từ GitHub OIDC Provider
+        # Only accept tokens issued by the configured GitHub OIDC provider.
         Principal = {
           Federated = aws_iam_openid_connect_provider.github.arn
         }
 
         Action = "sts:AssumeRoleWithWebIdentity"
 
-        # Điều kiện bảo mật — Quan trọng nhất!
-        # Ngay cả khi Token đến từ GitHub, nó cũng phải thỏa mãn
-        # 2 điều kiện này mới được cấp quyền
+        # Require the token to target AWS STS and originate from the expected repository and branch.
         Condition = {
           StringEquals = {
-            # Điều kiện 1: Token phải được tạo ra cho đúng dịch vụ STS
             "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
           }
           StringLike = {
-            # Điều kiện 2: Token phải đến từ đúng Repo của bạn
-            # "sub" (subject) chứa thông tin repo và branch
-            # ref:refs/heads/main → Chỉ cho phép nhánh "main"
-            # Dùng wildcard (*) nếu muốn cho phép mọi nhánh
+            # Restrict access to the main branch of the configured repository.
             "token.actions.githubusercontent.com:sub" = "repo:${var.github_repo}:ref:refs/heads/main"
           }
         }
@@ -63,9 +55,8 @@ resource "aws_iam_role" "github_actions" {
 }
 
 ############################################
-# INLINE POLICY — Quyền hạn của Role
-# Đây là danh sách những gì GitHub Actions
-# được phép làm trên AWS của bạn
+# Inline Policy
+# Permissions granted to GitHub Actions for Terraform plan/apply operations.
 ############################################
 resource "aws_iam_role_policy" "github_actions_terraform" {
   name = "${var.name_prefix}-terraform-execution"
@@ -77,7 +68,7 @@ resource "aws_iam_role_policy" "github_actions_terraform" {
       {
         Sid    = "TerraformStateAccess"
         Effect = "Allow"
-        # Cho phép đọc/ghi file tfstate trong đúng cái Bucket của dự án
+        # Manage Terraform state objects in the project state bucket.
         Action = [
           "s3:GetObject",
           "s3:PutObject",
@@ -92,7 +83,7 @@ resource "aws_iam_role_policy" "github_actions_terraform" {
       {
         Sid    = "TerraformLockAccess"
         Effect = "Allow"
-        # Cho phép khóa/mở khóa State khi đang chạy
+        # Manage Terraform state lock records during CI/CD runs.
         Action = [
           "dynamodb:GetItem",
           "dynamodb:PutItem",
@@ -103,7 +94,7 @@ resource "aws_iam_role_policy" "github_actions_terraform" {
       {
         Sid    = "TerraformSSMReadSecrets"
         Effect = "Allow"
-        # Cho phép đọc Secrets để plan/apply (giống EC2 đọc SSM)
+        # Read SSM parameters required by Terraform during plan/apply.
         Action = [
           "ssm:GetParameter",
           "ssm:GetParameters",
@@ -117,10 +108,7 @@ resource "aws_iam_role_policy" "github_actions_terraform" {
       {
         Sid      = "TerraformInfraAccess"
         Effect   = "Allow"
-        # Cho phép quản lý toàn bộ hạ tầng của dự án
-        # Ghi chú: Trong môi trường Enterprise thực tế,
-        # bạn nên chia nhỏ thành các policy riêng biệt
-        # để tuân thủ nguyên tắc Least Privilege chặt chẽ hơn
+        # Manage the infrastructure services defined by this Terraform project.
         Action = [
           "ec2:*",
           "rds:*",
@@ -128,11 +116,56 @@ resource "aws_iam_role_policy" "github_actions_terraform" {
           "autoscaling:*",
           "cloudfront:*",
           "wafv2:*",
-          "iam:*",
           "acm:*",
           "logs:*"
         ]
         Resource = "*"
+      },
+      {
+        Sid    = "TerraformIamAccess"
+        Effect = "Allow"
+        # Limit IAM permissions to the operations Terraform needs for this project.
+        Action = [
+          "iam:AddRoleToInstanceProfile",
+          "iam:AttachRolePolicy",
+          "iam:CreateInstanceProfile",
+          "iam:CreateOpenIDConnectProvider",
+          "iam:CreateRole",
+          "iam:DeleteInstanceProfile",
+          "iam:DeleteOpenIDConnectProvider",
+          "iam:DeleteRole",
+          "iam:DeleteRolePolicy",
+          "iam:DetachRolePolicy",
+          "iam:GetInstanceProfile",
+          "iam:GetOpenIDConnectProvider",
+          "iam:GetPolicy",
+          "iam:GetPolicyVersion",
+          "iam:GetRole",
+          "iam:GetRolePolicy",
+          "iam:ListAttachedRolePolicies",
+          "iam:ListInstanceProfilesForRole",
+          "iam:ListRolePolicies",
+          "iam:ListRoleTags",
+          "iam:PassRole",
+          "iam:PutRolePolicy",
+          "iam:RemoveRoleFromInstanceProfile",
+          "iam:TagInstanceProfile",
+          "iam:TagOpenIDConnectProvider",
+          "iam:TagRole",
+          "iam:UntagInstanceProfile",
+          "iam:UntagOpenIDConnectProvider",
+          "iam:UntagRole",
+          "iam:UpdateAssumeRolePolicy",
+          "iam:UpdateOpenIDConnectProviderThumbprint",
+          "iam:UpdateRole",
+          "iam:UpdateRoleDescription"
+        ]
+        Resource = [
+          "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.name_prefix}-*",
+          "arn:aws:iam::${data.aws_caller_identity.current.account_id}:instance-profile/${var.name_prefix}-*",
+          "arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/token.actions.githubusercontent.com",
+          "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+        ]
       }
     ]
   })

@@ -6,7 +6,6 @@
 
 # ─── Terraform core ───────────────────────────────────────
 **/.terraform/
-**/.terraform.lock.hcl
 
 # ─── State files (never commit state to Git) ──────────────
 *.tfstate
@@ -28,7 +27,6 @@ crash.*.log
 *.tfplan
 
 # ─── Other ───────────────────────────────────────────────
-INFRASTRUCTURE.md
 TECHNICAL_EXPLAINER.md
 ComparisonTool.html
 SESSION_NOTES.md

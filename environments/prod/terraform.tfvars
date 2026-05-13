@@ -35,8 +35,8 @@ custom_domain       = "nguyenchithanhit.id.vn"
 enable_waf          = false
 waf_rate_limit      = 1000
 
-# CI/CD — GitHub OIDC
-# Phải khớp chính xác với tên Repo trên GitHub (owner/repo-name)
-github_terraform_repo = "Thanh123-ui/terraform"
+# CI/CD - GitHub OIDC
+# Must match the exact GitHub repository name in owner/repository format.
+github_terraform_repo = "ChiThanh-cloud/terraform"
 tf_state_bucket       = "hospital-booking-tfstate"
 tf_lock_table         = "hospital-booking-tflock"
